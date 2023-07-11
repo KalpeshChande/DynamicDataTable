@@ -1,0 +1,105 @@
+<template>
+    <!-- Error block -->
+    <template if:true={error}>
+        <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error" role="alert">
+            <span class="slds-assistive-text">error</span>
+            <p>{error}</p>
+        </div>
+    </template>
+    <!-- Main content -->
+    <lightning-card variant="Narrow" title={titleFormatted} icon-name={iconName}>
+        <!-- custom action buttons for list, by default new is displayed -->
+        <lightning-button  slot="actions"
+        class="slds-p-left_xx-small" label={buttonlabel} hidden={ishiddenbutton} onclick={callExternalCmp}></lightning-button>
+        <lightning-button  slot="actions"
+        class="slds-p-left_xx-small" label={navigatecmpbtn} hidden={ishiddencmp} onclick={navigateCmp}></lightning-button>
+
+        <template if:true={isRecCreatable}>
+            <template for:each={actionButtons} for:item="actionButton" for:index="index">
+                <lightning-button key={actionButton.label} label={actionButton.label} title={actionButton.label}
+                    variant={actionButton.variant} onclick={handleButtonAction} data-name={actionButton.name}
+                    class="slds-p-left_xx-small" slot="actions">
+                </lightning-button>
+            </template>
+        </template>
+            <lightning-button-icon icon-name="utility:refresh" alternative-text="Refresh" onclick={init} slot="actions"
+                class="slds-p-left_xx-small">
+            </lightning-button-icon>
+       
+
+        <!-- SEARCH BAR -->
+        <div class="slds-p-around_small" if:true={hasSearchBar} onkeyup={onSearchChange}>
+            <lightning-input name="enter-search"  label="Search" type="search"></lightning-input>
+        </div>
+
+        <!-- Data table  -->
+
+        <template lwc:if={isEditEnabled}>
+            <template if:true={recordsToDisplay}>
+                <!-- DATATABLE WITH CHECKBOXES -->
+                <c-extended-datatable data-id="table-component-id" hide-checkbox-column={showCheckboxes} key-field="Id"
+                    data={recordsToDisplay} columns={columns} onrowaction={handleRowAction}
+                    onrowselection={handleRowSelection} onsave={handleSave} draft-values={draftValues}
+                    sorted-direction={sortDirection} onsort={handleSort} sorted-by={sortBy}
+                    show-row-number-column={showRowNumber} onpicklistchanged={customTypeChanged}
+                    onlookupchanged={customTypeChanged} ontextareachanged={customTypeChanged}>
+                </c-extended-datatable>
+            </template>
+        </template>
+        <template lwc:else>
+            <template if:true={recordsToDisplay}>
+                <!-- DATATABLE WITH CHECKBOXES -->
+                <c-extended-datatable data-id="table-component-id" hide-checkbox-column={showCheckboxes} key-field="Id"
+                    data={recordsToDisplay} columns={columns} onrowaction={handleRowAction}
+                    onrowselection={handleRowSelection} sorted-direction={sortDirection} onsort={handleSort}
+                    sorted-by={sortBy} show-row-number-column={showRowNumber} onpicklistchanged={customTypeChanged}
+                    onlookupchanged={customTypeChanged} ontextareachanged={customTypeChanged} suppress-bottom-bar>
+                </c-extended-datatable>
+            </template>
+        </template>
+
+        <!-- Pagination -->
+
+        <div class="slds-grid slds-grid_vertical-align-center slds-grid_align-spread" style="padding-top: 0.5em;"
+            if:true={hasPagination}>
+            <div class="slds-col">
+                <div class="slds-list_inline slds-p-bottom_xx-small">
+                    <label class="slds-text-color_weak slds-p-horizontal_x-small" for="recordsPerPage">Page
+                        Size:</label>
+                    <div class="slds-select_container">
+                        <select class="slds-select" id="recordsPerPage" onchange={handleRecordsPerPage}>
+                            <template for:each={pageSizeOptions} for:item="option">
+                                <option key={option} value={option}>{option}</option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div class="slds-align_absolute-center" style="height:5rem">
+                <lightning-button variant="brand" disabled={isDisablePrev} label="First" title="Primary action"
+                    onclick={firstPage} class="slds-m-left_xx-small"></lightning-button>
+                <lightning-button variant="brand" disabled={isDisablePrev} label="Previous" title="Primary action"
+                    onclick={previousPage} class="slds-m-left_xx-small"></lightning-button>
+                &nbsp;
+                <span class="slds-badge">Showing {pageNumber} &nbsp;of&nbsp; {totalPages} &nbsp;&nbsp;Page(s)</span>
+                &nbsp;
+                <lightning-button variant="brand" disabled={isDisableNext} label="Next" title="Primary action"
+                    onclick={nextPage} class="slds-m-left_xx-small"></lightning-button>
+                <lightning-button variant="brand" disabled={isDisableNext} label="Last" title="Primary action"
+                    onclick={lastPage} class="slds-m-left_xx-small slds-m-right_xx-small"></lightning-button>
+            </div>
+        </div>
+
+        <footer class="slds-card__footer" if:true={hasToShowViewAll}>
+            <lightning-button variant="base" label="View all" title="View all" onclick={showAllRecords}>
+            </lightning-button>
+        </footer>
+        <footer class="slds-card__footer" if:true={showCollapse}>
+            <lightning-button variant="base" label="Collapse" title="Collapse" onclick={showInitialRecordsWithLimit}>
+            </lightning-button>
+        </footer>
+    </lightning-card>
+</template>

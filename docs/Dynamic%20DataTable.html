@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Class: Dynamic DataTable</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Class: Dynamic DataTable</h1>
+
+    
+
+
+
+
+<section>
+
+<header>
+    
+        <h2><span class="attribs"><span class="type-signature"></span></span>Dynamic DataTable</h2>
+        
+            <div class="class-description">This component is designed to display a dynamic datatable for a specific object, allowing users to view, edit, and delete records.</div>
+        
+    
+</header>
+
+<article>
+    <div class="container-overview">
+    
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="lwcRelatedList.js.html">lwcRelatedList.js</a>, <a href="lwcRelatedList.js.html#line45">line 45</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5>Examples</h5>
+    
+    <pre class="prettyprint"><code>&lt;sfdc-lwc-lightning-datatable </code></pre>
+
+    <pre class="prettyprint"><code>&lt;sfdc-lwc-lightning-datatable title="Data Table" ,objectName="Account" ,
+fields="FirstName,LastName,AccountId,CreatedDate,Account.Name" ,
+predefinedCol="{"Account.Name":{"label":"Account Name","type":"url",
+"typeAttributes":{"label": { "fieldName": "Account.Name" ,"recId": "AccountId"}}},
+"AccountId":{"label":"Ac Id","type":"Id"}}" ,
+relatedFieldAPI="AccountId" ,whereClause="FirstName!=null", isCounterDisplayed=true ,
+actionButtons="[{"name": "New","label": "New","variant": "neutral"}]" ,
+hasSearchBar=true ,showCheckboxes=true ,showRowNumber=true ,isEditEnabled=true ,
+hasPagination=true ,maxRecordCount=2000,navigatecmpbtn="Navigate To Cmp",
+showCheckboxes=true ,componentname="chatGPT">&lt;/sfdc-lwc-lightning-datatable></code></pre>
+
+
+
+    
+    </div>
+
+    
+        <h3 class="subsection-title">Extends</h3>
+
+        
+
+
+    <ul>
+        <li>NavigationMixin(LightningElement)</li>
+    </ul>
+
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</article>
+
+</section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Dynamic%2520DataTable.html">Dynamic DataTable</a></li></ul><h3>Global</h3><ul><li><a href="global.html#appendField">appendField</a></li><li><a href="global.html#appendWhere">appendWhere</a></li><li><a href="global.html#buildSOQL">buildSOQL</a></li><li><a href="global.html#callExternalCmp">callExternalCmp</a></li><li><a href="global.html#checkFormulaImageFields">checkFormulaImageFields</a></li><li><a href="global.html#connectedCallback">connectedCallback</a></li><li><a href="global.html#customTypeChanged">customTypeChanged</a></li><li><a href="global.html#deleteRow">deleteRow</a></li><li><a href="global.html#editRecord">editRecord</a></li><li><a href="global.html#fetchRecords">fetchRecords</a></li><li><a href="global.html#findRowIndexById">findRowIndexById</a></li><li><a href="global.html#firstPage">firstPage</a></li><li><a href="global.html#formatData">formatData</a></li><li><a href="global.html#handleButtonAction">handleButtonAction</a></li><li><a href="global.html#handleRecordsPerPage">handleRecordsPerPage</a></li><li><a href="global.html#handleRowAction">handleRowAction</a></li><li><a href="global.html#handleRowSelection">handleRowSelection</a></li><li><a href="global.html#handleSave">handleSave</a></li><li><a href="global.html#handleSort">handleSort</a></li><li><a href="global.html#hasToShowViewAll">hasToShowViewAll</a></li><li><a href="global.html#init">init</a></li><li><a href="global.html#isDisableNext">isDisableNext</a></li><li><a href="global.html#isDisablePrev">isDisablePrev</a></li><li><a href="global.html#lastPage">lastPage</a></li><li><a href="global.html#mergeDraftValues">mergeDraftValues</a></li><li><a href="global.html#newRecord">newRecord</a></li><li><a href="global.html#nextPage">nextPage</a></li><li><a href="global.html#onSearchChange">onSearchChange</a></li><li><a href="global.html#paginationHelper">paginationHelper</a></li><li><a href="global.html#previousPage">previousPage</a></li><li><a href="global.html#showAllRecords">showAllRecords</a></li><li><a href="global.html#showInitialRecordsWithLimit">showInitialRecordsWithLimit</a></li><li><a href="global.html#showRowDetails">showRowDetails</a></li><li><a href="global.html#showToast">showToast</a></li><li><a href="global.html#sortData">sortData</a></li><li><a href="global.html#titleFormatted">titleFormatted</a></li><li><a href="global.html#updateDraftValues">updateDraftValues</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.2</a> on Mon Jun 26 2023 15:51:19 GMT+0530 (India Standard Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

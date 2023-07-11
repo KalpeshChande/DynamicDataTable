@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: lwcRelatedList.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: lwcRelatedList.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import { LightningElement, track, api } from 'lwc';
+import { NavigationMixin } from 'lightning/navigation';
+import { deleteRecord } from 'lightning/uiRecordApi';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import getRecords from '@salesforce/apex/RelatedList.getRecords';
+import onSearch from '@salesforce/apex/RelatedList.onSearch';
+import buildFieldJSON from '@salesforce/apex/RelatedList.buildFieldJSON';
+import { updateRecord } from 'lightning/uiRecordApi';
+import {
+    configLocal,
+    setPredefinedColumnJSON,
+    formatData,
+    _formatData
+} from './lwcRelatedListHelper';
+// import recordUpdatedSuccessMessage from '@salesforce/label/c.recordUpdatedSuccessMessage';
+// import recordDeletedSuccessMessage from '@salesforce/label/c.recordDeletedSuccessMessage';
+const actions = [
+    { label: 'Show details', name: 'show_details' },
+    { label: 'Edit', name: 'edit' },
+    { label: 'Delete', name: 'delete' }
+];
+
+
+/**
+ * This component is designed to display a dynamic datatable for a specific object, allowing users to view, edit, and delete records.
+ * @alias Dynamic DataTable
+ * @extends NavigationMixin(LightningElement)
+ * @hideconstructor
+ *
+ * @example
+ * &lt;sfdc-lwc-lightning-datatable 
+ * @example
+ * &lt;sfdc-lwc-lightning-datatable title="Data Table" ,objectName="Account" ,
+ * fields="FirstName,LastName,AccountId,CreatedDate,Account.Name" ,
+ * predefinedCol="{"Account.Name":{"label":"Account Name","type":"url",
+ * "typeAttributes":{"label": { "fieldName": "Account.Name" ,"recId": "AccountId"}}},
+ * "AccountId":{"label":"Ac Id","type":"Id"}}" ,
+ * relatedFieldAPI="AccountId" ,whereClause="FirstName!=null", isCounterDisplayed=true ,
+ * actionButtons="[{"name": "New","label": "New","variant": "neutral"}]" ,
+ * hasSearchBar=true ,showCheckboxes=true ,showRowNumber=true ,isEditEnabled=true ,
+ * hasPagination=true ,maxRecordCount=2000,navigatecmpbtn="Navigate To Cmp",
+ * showCheckboxes=true ,componentname="chatGPT">&lt;/sfdc-lwc-lightning-datatable>
+ */
+
+export default class LwcDatatable extends NavigationMixin(LightningElement) {
+    // Public Property
+    @api recordId;
+    @api iconName;
+    @api title;
+    @api objectName;
+    @api fields;
+    @api relatedFieldAPI;
+    @api formulaImageFields;
+    @api whereClause;
+    @api limit;
+    @api isCounterDisplayed;
+    @api actionButtons; //buttons for the list
+    @api showCheckboxes;
+    @api showViewAll;
+    @api hasPagination;
+    @api predefinedCol = '';
+    @api hasSearchBar;
+    @api orderBy;
+    @api showRowNumber;
+    @api isEditEnabled;
+    @api buttonlabel;
+    @api ishiddenbutton=false;
+    @api maxRecordCount;
+    @api navigatecmpbtn;
+    @api ishiddencmp=false;
+    @api componentname;
+   
+    // Private Property
+    @track data;
+    @track soql;
+    @track offSet = 0;
+    @track totalRows = 0;
+    @track error;
+    @track selectedRows;
+    @track initialLimit;
+    @track showCollapse = false;
+    @track sortBy;
+    @track sortDirection = 'asc';
+    @track columns;
+    @track colsJson;
+    @track searchTerm;
+    //pagination
+    @track pageSizeOptions = [5, 10, 25, 50, 75, 100]; //Page size options
+    totalRecords = 0; //Total no.of records
+    pageSize; //No.of records to be displayed per page
+    totalPages; //Total no.of pages
+    pageNumber = 1; //Page number    
+    recordsToDisplay = []; //Records to be displayed on the page
+    @track isRecCreatable=false;
+
+
+    draftValues = []; // don't touch
+    draftValuesCustomDatatypes = [];
+    labels = {
+        'recordUpdatedSuccessMessage':'Updated successfully',
+        'recordDeletedSuccessMessage':'deleted'
+    };
+
+    // Do init funtion
+    /**
+     * Initializes the component when it is connected to the DOM.
+     * @returns {void}
+     */
+    connectedCallback() {
+        //This function can used for local development config, pass 'true' for config
+        configLocal(this, false);
+        setPredefinedColumnJSON(this);
+        if (this.actionButtons) {
+            this.actionButtons = JSON.parse(this.actionButtons);
+        }
+        if (this.formulaImageFields) {
+            this.formulaImageFields = JSON.parse(this.formulaImageFields);
+        }
+        this.initialLimit = this.limit;
+        console.log('recordId@@@111'+this.recordId);
+        this.buildSOQL();
+        this.init();
+    }
+
+    /**
+     * Initializes the component with the necessary data and configurations.
+     * @returns {void}
+     */
+    init() {
+        console.log('this.colsJson@@@@',this.colsJson);
+        buildFieldJSON({
+            soql: this.soql,
+            objectName: this.objectName,
+            whereClause: this.appendWhere(),
+            colsJson: JSON.stringify(this.colsJson),
+            isEditable:this.isEditEnabled
+        })
+            .then((data) => {
+                if (data) {
+                    const { records, cols, count, iconName,isCreatable } = formatData(
+                        this,
+                        data
+                    );
+                    this.colsJson = cols;
+                    console.log('this.colsJson@@@',this.colsJson)
+                    const colAc = Object.values(cols);
+                    colAc.push({
+                        type: 'action',
+                        typeAttributes: { rowActions: actions }
+                    });
+                    this.columns = colAc;
+                    this.data = records;
+                    this.recordsToDisplay=this.data;
+                    this.totalRecords = this.data.length;                
+                    this.pageSize = this.pageSizeOptions[0]; 
+                    this.paginationHelper();
+                    this.iconName = this.iconName ? this.iconName : iconName;
+                    this.totalRows = count;
+                    this.isRecCreatable=isCreatable;
+                    console.log('this.this.data.length@@',this.data.length);
+                    this.checkFormulaImageFields();
+                     if(this.maxRecordCount>5000){
+                        console.log('inside if');
+                        console.log('this.data.length'+this.data.length);
+                        this.showViewAll=false;
+                    }else{
+                        console.log('inside else');
+                        console.log('this.showViewAll'+this.showViewAll);
+                        this.showViewAll=true;
+                    }
+                }
+            })
+            .catch((error) => {
+                if (error) {
+                    this.formatError(error);
+                }
+            });
+    }
+    
+    /**
+     * Description
+     * // Formula fields with images (e.g. traffic lights) are of type 'string'
+     * // Change the type to 'image' to use custom data type to correctly display actual images
+     * @returns {any}
+     */
+    checkFormulaImageFields() {
+        if (this.formulaImageFields) {
+            console.log('this.formulaImageFields@@@'+this.formulaImageFields);
+            console.log('this.columns@@11',this.columns);
+            this.columns.forEach((col) => {
+                console.log('this.columns@@11',col.fieldName);
+                console.log('this.formulaImageFields.indexOf(col.fieldName)',this.formulaImageFields.indexOf(col.fieldName));
+                if (this.formulaImageFields.indexOf(col.fieldName) !== -1) {
+                    console.log('col.type@@'+col.type);
+                    col.type = 'image';
+                }
+            });
+        }
+    }
+
+    /**
+     * Handles the event when a custom type is changed.
+     * @param {CustomEvent} event - The event object containing the data.
+     * @returns {void}
+     */
+    customTypeChanged(event) {
+        event.stopPropagation();
+        let dataReceived = event.detail.data;
+        this.updateDraftValues(
+            {
+                Id: dataReceived.context,
+                [dataReceived.fieldName]: dataReceived.value
+                    ? dataReceived.value
+                    : null
+            },
+            dataReceived.fieldName
+        );
+    }
+
+    /**
+     * Description
+     * store changed value to do operations
+     * on save. This will enable inline editing &amp;
+     * show standard cancel &amp; save button
+     * @param {any} updateItem
+     * @param {any} fieldName
+     * @returns {any}
+     */
+    updateDraftValues(updateItem, fieldName) {
+        let hasNewDraftValueRecord = false;
+        let copyDraftValuesCustomTypes = [...this.draftValuesCustomDatatypes];
+        
+        copyDraftValuesCustomTypes.forEach((item) => {
+            if (item.Id === updateItem.Id) {
+                item[fieldName] = updateItem[fieldName];
+
+                hasNewDraftValueRecord = true;
+            }
+        });
+
+        if (hasNewDraftValueRecord) {
+            this.draftValuesCustomDatatypes = [...copyDraftValuesCustomTypes];
+            this.draftValuesCustomDatatypes = this.mergeDraftValues([
+                ...this.draftValues,
+                ...this.draftValuesCustomDatatypes
+            ]);
+        } else {
+            this.draftValuesCustomDatatypes = [
+                ...copyDraftValuesCustomTypes,
+                updateItem
+            ];
+        }
+
+        this.draftValues = this.mergeDraftValues([
+            ...this.template.querySelector('c-extended-datatable').draftValues,
+            ...this.draftValuesCustomDatatypes
+        ]);
+    }
+
+    /**
+     * Description
+     * mergeDraftValues function takes an array of objects and merges objects with the same Id property
+     * @param {any} arr
+     * @returns {any}
+     */
+    mergeDraftValues(arr) {
+        return arr.reduce((merged, current) => {
+            let found = merged.find((val) => val.Id === current.Id);
+            if (found) {
+                // merge the current object with the existing object
+                Object.assign(found, current);
+            } else {
+                // add the current object to the merged object
+                merged.push(current);
+            }
+            return merged;
+        }, []);
+    }
+
+    /**
+     * Description
+     *  Fetches records using the provided SOQL query and updates the component's data and pagination.
+     * @returns {any}
+     */
+    fetchRecords() {
+        getRecords({ soql: this.soql })
+            .then((data) => {
+                if (data) {
+                    this.data = _formatData(this.colsJson, data);
+                    console.log('this.data@@@',this.data);
+                    this.recordsToDisplay=this.data;
+                    this.totalRecords = this.data.length; // update total records count                 
+                    this.pageSize = this.pageSizeOptions[0]; //set pageSize with default value as first option
+                    this.paginationHelper(); // call helper menthod to update pagination logic 
+                }
+            })
+            .catch((error) => {
+                if (error) {
+                    this.formatError(error);
+                }
+            });
+    }
+
+    /**
+     * Handles saving the draft values and updating the records.
+     * @param {any} event - The event containing the draft values.
+     * @returns {void}
+     */
+    handleSave(event) {
+        const mergedValues = this.mergeDraftValues([
+            ...event.detail.draftValues,
+            ...this.draftValuesCustomDatatypes
+        ]);
+console.log('mergedValues@@@'+JSON.stringify(mergedValues));
+        const recordInputs = mergedValues.slice().map((draft) => {
+            const fields = Object.assign({}, draft);
+            return { fields };
+        });
+
+        const promises = recordInputs.map((recordInput) =>
+            updateRecord(recordInput)
+        );
+        Promise.all(promises)
+            .then(() => {
+                this.showToast(
+                    'Success',
+                    this.labels.recordUpdatedSuccessMessage,
+                    'success'
+                );
+                this.draftValuesCustomDatatypes = [];
+                this.draftValues = [];
+                this.fetchRecords();
+               this.totalRecords = this.data.length; // update total records count                 
+                    this.pageSize = this.pageSizeOptions[0]; //set pageSize with default value as first option
+                    this.paginationHelper();
+            })
+        
+            .catch((error) => {
+                if (error) {
+                    this.formatError(error);
+                }
+            });
+    }
+
+    formatError(error) {
+        if (error) {
+            this.error = 'Unknown error';
+            if (Array.isArray(error.body)) {
+                this.error = error.body.map((e) => e.message).join(', ');
+            } else if (typeof error.body.message === 'string') {
+                this.error = error.body.message;
+            }
+        }
+    }
+
+    /**
+     * Handles the row action event triggered on the datatable.
+     * @param {any} event - The event containing the row action details.
+     * @returns {void}
+     */
+    handleRowAction(event) {
+        const actionName = event.detail.action.name;
+        const row = event.detail.row;
+        switch (actionName) {
+            case 'edit':
+                this.editRecord(row);
+                break;
+            case 'delete':
+                this.deleteRow(row);
+                break;
+            case 'show_details':
+                this.showRowDetails(row);
+                break;
+            default:
+        }
+    }
+
+    /**
+     * Handles the button action event triggered on the component.
+     * @param {any} event - The event containing the button action details.
+     * @returns {void}
+     */
+    handleButtonAction(event) {
+        //call desired javacript method or apex call, or throw an event based on the button key(new, delete-selected...)
+        //you have selected rows in this.selectedRows
+        const buttonLabel = event.target.dataset.name;
+        switch (buttonLabel) {
+            case 'New':
+                this.newRecord();
+                break;
+            default:
+        }
+    }
+
+    //Next button to get the next data
+    /**
+     * Handles the event when the records per page option is changed.
+     * @param {any} event - The event containing the selected value.
+     * @returns {void}
+     */
+    handleRecordsPerPage(event) {
+        this.pageSize = event.target.value;
+        this.paginationHelper();
+    }
+    /**
+     * Moves to the previous page.
+     * @returns {void}
+     */
+    previousPage() {
+        this.pageNumber = this.pageNumber - 1;
+        this.paginationHelper();
+    }
+
+    /**
+     * Moves to the previous page.
+     * @returns {void}
+     */
+    nextPage() {
+        this.pageNumber = this.pageNumber + 1;
+        this.paginationHelper();
+    }
+
+    /**
+     * Moves to the first page.
+     * @returns {void}
+     */
+    firstPage() {
+        this.pageNumber = 1;
+        this.paginationHelper();
+    }
+
+    /**
+     * Moves to the last page.
+     * @returns {void}
+     */
+    lastPage() {
+        this.pageNumber = this.totalPages;
+        this.paginationHelper();
+    }
+
+    /**
+     * Checks if the previous page button should be disabled.
+     * @returns {boolean} - True if the previous page button should be disabled, false otherwise.
+     */
+    get isDisablePrev() {
+        return this.pageNumber == 1;
+    }
+
+    /**
+     * Checks if the next page button should be disabled.
+     * @returns {boolean} - True if the next page button should be disabled, false otherwise.
+     */
+    get isDisableNext() {
+        return this.pageNumber == this.totalPages;
+    }
+
+     // JS function to handel pagination logic 
+        /**
+     * Updates the pagination logic and sets the records to display on the current page.
+     * @returns {void}
+     */
+     paginationHelper() {
+        this.recordsToDisplay = [];
+        // calculate total pages
+        this.totalPages = Math.ceil(this.totalRecords / this.pageSize);
+        // set page number 
+        if (this.pageNumber &lt;= 1) {
+            this.pageNumber = 1;
+        } else if (this.pageNumber >= this.totalPages) {
+            this.pageNumber = this.totalPages;
+        }
+
+        // set records to display on current page 
+        for (let i = (this.pageNumber - 1) * this.pageSize; i &lt; this.pageNumber * this.pageSize; i++) {
+            if (i === this.totalRecords) {
+                break;
+            }
+            this.recordsToDisplay.push(this.data[i]);
+        }
+    }
+
+    /*********************************************************************
+     * All Helper Method's
+     *********************************************************************/
+    /**
+     * Navigates to the standard new record page for a specific object.
+     * @returns {void}
+     */
+    newRecord() {
+        this[NavigationMixin.Navigate]({
+            type: 'standard__objectPage',
+            attributes: {
+                objectApiName: this.objectName,
+                actionName: 'new'
+            },
+            state: {
+                useRecordTypeCheck: 1
+            }
+        });
+    }
+
+    /**
+     * Deletes a row (record) from the data based on the provided row object.
+     * @param {object} row - The row object representing the record to delete.
+     * @returns {void}
+     */
+    deleteRow(row) {
+        let id = row.Id,
+            index = this.findRowIndexById(id);
+        if (index !== -1) {
+            deleteRecord(id)
+                .then(() => {
+                    this.data = this.data
+                        .slice(0, index)
+                        .concat(this.data.slice(index + 1));
+                    this.totalRows = this.totalRows - 1;
+                    this.showToast(
+                        'Success',
+                        this.labels.recordDeletedSuccessMessage,
+                        'success'
+                    );
+                })
+                .catch((error) => {
+                    this.showToast(
+                        'Error deleting record',
+                        error.body.message,
+                        'error'
+                    );
+                });
+        }
+    }
+
+    /**
+     * Finds the index of a row (record) in the data array based on the provided ID.
+     * @param {string} id - The ID of the record to find.
+     * @returns {number} - The index of the row in the data array. Returns -1 if not found.
+     */
+    findRowIndexById(id) {
+        let ret = -1;
+        this.data.some((row, index) => {
+            if (row.Id === id) {
+                ret = index;
+                return true;
+            }
+            return false;
+        });
+        return ret;
+    }
+
+    /**
+     * Navigates to the standard record detail page for a specific record.
+     * @param {object} row - The row object representing the record to view.
+     * @returns {void}
+     */
+    showRowDetails(row) {
+        this[NavigationMixin.Navigate]({
+            type: 'standard__recordPage',
+            attributes: {
+                recordId: row.Id,
+                objectApiName: this.objectName,
+                actionName: 'view'
+            }
+        });
+    }
+
+    /**
+     * Navigates to the standard record edit page for a specific record.
+     * @param {object} row - The row object representing the record to edit.
+     * @returns {void}
+     */
+    editRecord(row) {
+        this[NavigationMixin.Navigate]({
+            type: 'standard__recordPage',
+            attributes: {
+                recordId: row.Id,
+                objectApiName: this.objectName,
+                actionName: 'edit'
+            }
+        });
+    }
+
+    //Generic function to build soql
+    /**
+     * Builds the SOQL (Salesforce Object Query Language) query based on the component's configuration.
+     * Updates the 'soql' property with the generated query.
+     * @returns {void}
+     */
+    buildSOQL() {
+        let soql;
+        if (this.fields) soql = this.appendField();
+        soql += this.appendWhere();
+        soql += ' WITH SECURITY_ENFORCED ';
+
+        //if we filter on a column then we ignore the ORDER BY defined in the configuration
+        if (this.orderBy &amp;&amp; !this.sortBy) {
+            soql += ` ORDER BY ${this.orderBy}`;
+        } else if (this.sortBy &amp;&amp; this.sortDirection) {
+            soql += ` ORDER BY ${this.sortBy} ${this.sortDirection} `;
+        }
+
+        // if (this.limit &amp;&amp; this.limit > 0) {
+        //     soql += this.appendLimit();
+        //     soql += this.appendOffset();
+        // }
+
+        this.soql = soql;
+    }
+
+    /**
+     * Appends the field configuration to the SOQL query.
+     * @returns {string} The SOQL query segment for the fields.
+     */
+    appendField() {
+        let soql = `SELECT Id, ${this.fields} FROM ${this.objectName}`;
+        return soql;
+    }
+
+    /**
+     * Appends the WHERE clause to the SOQL query based on the component's filtering configuration.
+     * @returns {string} The SOQL query segment for the WHERE clause.
+     */
+    appendWhere() {
+        let where = ' WHERE ';
+        if (this.relatedFieldAPI)
+            where += `${this.relatedFieldAPI} = '${this.recordId}'`;
+        if (this.whereClause &amp;&amp; this.relatedFieldAPI)
+            where += ` AND ${this.whereClause}`;
+        else if (this.whereClause) where += `${this.whereClause}`;
+        return where === ' WHERE ' ? '' : where;
+    }
+
+    // appendLimit() {
+    //     return ` LIMIT ${this.limit}`;
+    // }
+
+    // appendOffset() {
+    //     return ` OFFSET ${this.offSet}`;
+    // }
+
+    /**
+     * Displays a toast message.
+     * @param {string} title - The title of the toast message.
+     * @param {string} message - The content of the toast message.
+     * @param {string} variant - The variant of the toast message (e.g., 'success', 'error', 'warning').
+     * @returns {void}
+     */
+    showToast(title, message, variant) {
+        this.dispatchEvent(
+            new ShowToastEvent({
+                title: title,
+                message: message,
+                variant: variant
+            })
+        );
+    }
+
+    /**
+     * Formats the title by appending the total rows count if the counter is displayed.
+     * @returns {string} The formatted title.
+     */
+    get titleFormatted() {
+        return this.isCounterDisplayed
+            ? this.title + ` (${this.totalRows})`
+            : this.title;
+    }
+
+    /**
+     * Handles the row selection event and updates the selected rows.
+     * @param {CustomEvent} event - The row selection event.
+     * @returns {void}
+     */
+    handleRowSelection(event) {
+        this.selectedRows = JSON.parse(
+            JSON.stringify(event.detail.selectedRows)
+        );
+        console.log('this.selectedRows@@'+JSON.stringify(event.detail.draftValues));
+    }
+
+    /**
+     * Determines whether to show the "View All" option.
+     * @returns {boolean} A boolean value indicating whether to show the "View All" option.
+     */
+    get hasToShowViewAll() {
+        return (
+             this.showViewAll
+        );
+    }
+
+    /**
+     * Fetches all records and displays them.
+     * @returns {void}
+     */
+    showAllRecords() {
+        // this.limit = 0;
+        // this.buildSOQL();
+        // this.fetchRecords();
+        // this.showViewAll = false;
+        // this.showCollapse = true;
+        getRecords({ soql: this.soql })
+        .then((data) => {
+            if (data) {
+                this.data = _formatData(this.colsJson, data);
+                console.log('this.data@@@',this.data);
+                this.recordsToDisplay=this.data;
+                this.showViewAll = false;
+                this.showCollapse = true;
+                this.hasPagination=false;
+            }
+        })
+        .catch((error) => {
+            if (error) {
+                this.formatError(error);
+            }
+        });
+    }
+
+    /**
+     * Displays the initial records with a limit.
+     * @returns {void}
+     */
+    showInitialRecordsWithLimit() {
+        this.limit = this.initialLimit;
+        this.showViewAll = true;
+        this.showCollapse = false;
+       // this.buildSOQL();
+       // this.fetchRecords();
+       this.hasPagination=true;
+       this.totalRecords = this.data.length; // update total records count                 
+                    this.pageSize = this.pageSizeOptions[0]; //set pageSize with default value as first option
+                    this.paginationHelper();
+    }
+
+    /**
+     * Handles the sorting of data based on the specified field and direction.
+     * @param {object} event - The sorting event.
+     * @returns {void}
+     */
+    handleSort(event) {
+        // if (this.searchTerm) {
+        //     return;
+        // }
+        this.sortBy = event.detail.fieldName;
+        this.sortDirection = event.detail.sortDirection;
+        this.sortData(this.sortBy, this.sortDirection);
+        this.paginationHelper();
+        // this.totalRecords = this.data.length; // update total records count                 
+        //             this.pageSize = this.pageSizeOptions[0]; //set pageSize with default value as first option
+        //             this.paginationHelper();
+    }
+
+    /**
+     * Sorts the data based on the specified field and direction.
+     * @param {string} fieldname - The name of the field to sort.
+     * @param {string} direction - The sorting direction ('asc' or 'desc').
+     * @returns {void}
+     */
+    sortData(fieldname, direction) {
+        let parseData = JSON.parse(JSON.stringify(this.data));
+        // Return the value stored in the field
+        let keyValue = (a) => {
+            return a[fieldname];
+        };
+        // cheking reverse direction
+        let isReverse = direction === 'asc' ? 1: -1;
+        // sorting data
+        parseData.sort((x, y) => {
+            x = keyValue(x) ? keyValue(x) : ''; // handling null values
+            y = keyValue(y) ? keyValue(y) : '';
+            // sorting values based on direction
+            return isReverse * ((x > y) - (y > x));
+        });
+        this.data = parseData;
+    }    
+
+    /**
+     * Handles the change event of the search input field.
+     * @param {object} event - The search change event.
+     * @returns {void}
+     */
+    onSearchChange(event) {
+        this.searchTerm = event.target.value;
+        if (!this.searchTerm || this.searchTerm === '') {
+            this.fetchRecords();
+            // this.totalRecords = this.data.length; // update total records count                 
+            //         this.pageSize = this.pageSizeOptions[0]; //set pageSize with default value as first option
+                    this.paginationHelper();
+        }
+
+        //minimum two caracters required to search
+        if (this.searchTerm &amp;&amp; this.searchTerm.length > 1) {
+            onSearch({
+                searchTerm: this.searchTerm,
+                objectApiName: this.objectName,
+                searchFields: this.fields,
+                whereClause: this.whereClause
+            })
+                .then((data) => {
+                    if(data.length>0){
+                    console.log('inside search',data);
+                    this.data = _formatData(this.colsJson, data);
+                    this.recordsToDisplay=this.data;
+                     console.log('this.recordsToDisplay@@@',this.recordsToDisplay);
+                     this.totalRecords = this.data.length; // update total records count   
+                     console.log('this.data.length@@',this.data.length);              
+                    // this.pageSize = this.pageSizeOptions[0]; //set pageSize with default value as first option
+                     this.paginationHelper();
+                    }else{
+                        this.recordsToDisplay=[];
+                        this.showToast(
+                            'Error',
+                            'No Data Found',
+                            'error'
+                        ); 
+                    }
+                })
+                .catch((error) => {
+                    console.log('error@@@'+error);
+                    this.showToast(
+                        'Error on search ',
+                        error.body.message,
+                        'error'
+                    );
+                });
+        }
+    }
+
+    /**
+     * Calls an external component with the selected rows data.
+     * @returns {void}
+     */
+    callExternalCmp(){
+        if(this.selectedRows==null){
+            this.showToast(
+                'Error',
+                'Please select checkbox',
+                'error'
+            );
+        }else{
+        const callCmp = new CustomEvent('clickcomponent', { detail: this.selectedRows });
+        this.dispatchEvent(callCmp);
+        }
+    }
+    navigateCmp(){
+            // Navigate to the target component dynamically
+            console.log('inside@@@');
+            console.log('comnponent name',this.componentname);
+            var cmpName=this.componentname.trim().toString();
+            console.log('cmpName'+cmpName)
+            this[NavigationMixin.Navigate]({
+              type: 'standard__component',
+              attributes: {
+                componentName: `c__${cmpName}` // Use dynamic value for the component name
+              }
+             
+            });
+            console.log('attributes'+ JSON.parse(JSON.stringify(this[NavigationMixin.Navigate])));
+          }
+}</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Dynamic%2520DataTable.html">Dynamic DataTable</a></li></ul><h3>Global</h3><ul><li><a href="global.html#appendField">appendField</a></li><li><a href="global.html#appendWhere">appendWhere</a></li><li><a href="global.html#buildSOQL">buildSOQL</a></li><li><a href="global.html#callExternalCmp">callExternalCmp</a></li><li><a href="global.html#checkFormulaImageFields">checkFormulaImageFields</a></li><li><a href="global.html#connectedCallback">connectedCallback</a></li><li><a href="global.html#customTypeChanged">customTypeChanged</a></li><li><a href="global.html#deleteRow">deleteRow</a></li><li><a href="global.html#editRecord">editRecord</a></li><li><a href="global.html#fetchRecords">fetchRecords</a></li><li><a href="global.html#findRowIndexById">findRowIndexById</a></li><li><a href="global.html#firstPage">firstPage</a></li><li><a href="global.html#formatData">formatData</a></li><li><a href="global.html#handleButtonAction">handleButtonAction</a></li><li><a href="global.html#handleRecordsPerPage">handleRecordsPerPage</a></li><li><a href="global.html#handleRowAction">handleRowAction</a></li><li><a href="global.html#handleRowSelection">handleRowSelection</a></li><li><a href="global.html#handleSave">handleSave</a></li><li><a href="global.html#handleSort">handleSort</a></li><li><a href="global.html#hasToShowViewAll">hasToShowViewAll</a></li><li><a href="global.html#init">init</a></li><li><a href="global.html#isDisableNext">isDisableNext</a></li><li><a href="global.html#isDisablePrev">isDisablePrev</a></li><li><a href="global.html#lastPage">lastPage</a></li><li><a href="global.html#mergeDraftValues">mergeDraftValues</a></li><li><a href="global.html#newRecord">newRecord</a></li><li><a href="global.html#nextPage">nextPage</a></li><li><a href="global.html#onSearchChange">onSearchChange</a></li><li><a href="global.html#paginationHelper">paginationHelper</a></li><li><a href="global.html#previousPage">previousPage</a></li><li><a href="global.html#showAllRecords">showAllRecords</a></li><li><a href="global.html#showInitialRecordsWithLimit">showInitialRecordsWithLimit</a></li><li><a href="global.html#showRowDetails">showRowDetails</a></li><li><a href="global.html#showToast">showToast</a></li><li><a href="global.html#sortData">sortData</a></li><li><a href="global.html#titleFormatted">titleFormatted</a></li><li><a href="global.html#updateDraftValues">updateDraftValues</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.2</a> on Mon Jun 26 2023 15:51:19 GMT+0530 (India Standard Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
